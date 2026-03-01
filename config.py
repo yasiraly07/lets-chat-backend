@@ -4,9 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # Supabase
-    supabase_url: str = "https://bpdsvidojultmujivkfw.supabase.co"
-    supabase_key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwZHN2aWRvanVsdG11aml2a2Z3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxNDQwMjksImV4cCI6MjA4NzcyMDAyOX0.V2-pAvcxepsjlrByZVUqc18y847-aQ4bHoBJTe9Tb04"
+    # Supabase (required — set via .env or environment variables)
+    supabase_url: str
+    supabase_key: str
 
     # Room settings
     max_users_per_room: int = 50

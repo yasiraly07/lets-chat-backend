@@ -1,5 +1,6 @@
 import json
 import logging
+import uuid
 from collections import deque
 from datetime import datetime, timezone
 from typing import Dict
@@ -140,9 +141,15 @@ class ConnectionManager:
 
         user = room.remove_user(user_id)
         if user is None:
-            return
+            return  # already removed (e.g. dead-socket cleanup raced)
 
         logger.info("User '%s' (%s) left room %s", user.username, user_id, room_id)
+
+        # Gracefully close the WebSocket if still open
+        try:
+            await user.websocket.close(code=1000)
+        except Exception:
+            pass  # socket already gone
 
         leave_msg = self._build_system_message(
             f"{user.username} left the chat",
@@ -163,19 +170,29 @@ class ConnectionManager:
         if room is None:
             return
 
+        data = json.dumps(payload)
         # Snapshot to avoid mutation during iteration
         snapshot = list(room.users.items())
         dead_users: list[str] = []
 
         for uid, user in snapshot:
             try:
-                await user.websocket.send_text(json.dumps(payload))
+                await user.websocket.send_text(data)
             except Exception:
                 logger.warning("Dead socket for '%s' in room %s", user.username, room_id)
                 dead_users.append(uid)
 
+        # Clean up dead sockets — remove_user directly to avoid recursive broadcast
         for uid in dead_users:
-            await self.disconnect(room_id, uid)
+            removed = room.remove_user(uid)
+            if removed:
+                logger.info("Cleaned up dead connection for '%s' in room %s", removed.username, room_id)
+                try:
+                    await removed.websocket.close(code=1011)
+                except Exception:
+                    pass
+        if dead_users:
+            self.delete_room_if_empty(room_id)
 
     async def send_chat_message(self, room_id: str, user_id: str, content: str) -> bool:
         """
@@ -195,7 +212,7 @@ class ConnectionManager:
 
         msg = {
             "type": "message",
-            "message_id": f"{user_id}-{datetime.now(timezone.utc).timestamp()}",
+            "message_id": f"{user_id}-{uuid.uuid4().hex[:8]}",
             "room_id": room_id,
             "user_id": user_id,
             "username": user.username,
@@ -250,7 +267,10 @@ class ConnectionManager:
     def _build_system_message(text: str, room_id: str, user_count: int, users: list[str]) -> dict:
         return {
             "type": "system",
+            "message_id": f"sys-{uuid.uuid4().hex[:12]}",
             "room_id": room_id,
+            "user_id": "system",
+            "username": "system",
             "content": text,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "user_count": user_count,

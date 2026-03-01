@@ -90,19 +90,42 @@ async def persist_message(msg: dict) -> bool:
         return False
 
 
-async def load_recent_messages(room_id: str, limit: int = 50) -> list[dict]:
-    """Load the N most recent messages for a room from Postgres."""
+async def is_username_taken_in_room(room_id: str, username: str) -> bool:
+    """
+    Return True if this username has ever posted a message in the room.
+    Used as a DB-level uniqueness gate that survives server restarts.
+    """
     try:
         db = await get_client()
         res = (
             await db.table("messages")
+            .select("message_id")
+            .eq("room_id", room_id)
+            .eq("username", username)
+            .neq("type", "system")
+            .limit(1)
+            .execute()
+        )
+        return bool(res.data)
+    except Exception:
+        logger.exception("Failed to check username '%s' in room %s", username, room_id)
+        return False  # fail open — in-memory check still applies
+
+
+async def load_recent_messages(room_id: str, limit: int = 50) -> list[dict]:
+    """Load the N most recent messages for a room from Postgres."""
+    try:
+        db = await get_client()
+        # Fetch newest N rows (desc), then reverse so oldest-first for display
+        res = (
+            await db.table("messages")
             .select("message_id, room_id, user_id, username, content, type, timestamp")
             .eq("room_id", room_id)
-            .order("timestamp", desc=False)
+            .order("timestamp", desc=True)
             .limit(limit)
             .execute()
         )
-        rows = res.data or []
+        rows = list(reversed(res.data or []))
         # Normalise to the same shape the WS layer uses
         return [
             {

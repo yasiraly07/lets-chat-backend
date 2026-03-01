@@ -28,12 +28,17 @@ async def room_status(room_id: str):
     """
     Returns whether the room exists, who is connected, and the creation time.
     Useful before a user tries to join.
+    - exists=False           → room was never created
+    - exists=True, user_count=0 → room exists in DB but nobody is online right now
+    - exists=True, user_count>0 → room is live
     """
     room = manager.get_room(room_id.upper())
     if room is None:
+        # Check DB so callers can distinguish "never existed" from "everyone left"
+        row = await db.room_exists_in_db(room_id.upper())
         return RoomStatusResponse(
             room_id=room_id.upper(),
-            exists=False,
+            exists=bool(row),
             user_count=0,
             users=[],
         )

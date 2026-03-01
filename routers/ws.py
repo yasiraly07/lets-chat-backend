@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import uuid
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 
@@ -9,6 +10,9 @@ import database as db
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["websocket"])
+
+_ROOM_ID_RE = re.compile(r"^[A-Z0-9]{4,20}$")
+_USERNAME_RE = re.compile(r"^[\w\- ]{1,32}$")  # alphanumeric, underscore, hyphen, space
 
 
 @router.websocket("/ws/{room_id}")
@@ -37,7 +41,28 @@ async def websocket_endpoint(
         "error"        — something went wrong
         "rate_limited" — sender is sending too fast
     """
-    room_id = room_id.upper()
+    room_id = room_id.strip().upper()
+    username = username.strip()
+
+    # Validate room ID format
+    if not _ROOM_ID_RE.match(room_id):
+        await websocket.accept()
+        await websocket.send_text(json.dumps({
+            "type": "error",
+            "content": "Invalid room ID. Only letters and digits, 4-20 characters.",
+        }))
+        await websocket.close(code=4002)
+        return
+
+    # Validate username format
+    if not username or not _USERNAME_RE.match(username):
+        await websocket.accept()
+        await websocket.send_text(json.dumps({
+            "type": "error",
+            "content": "Invalid username. Use letters, digits, spaces, hyphens, or underscores (1-32 chars).",
+        }))
+        await websocket.close(code=4002)
+        return
 
     # Ensure room exists in memory (auto-create so bare links always work)
     if not manager.room_exists(room_id):
@@ -60,8 +85,11 @@ async def websocket_endpoint(
         await websocket.close(code=4003)
         return
 
-    # Duplicate username check
-    if room and room.username_taken(username):
+    # Duplicate username check — in-memory (currently connected) AND DB (persisted history)
+    username_taken = (room and room.username_taken(username)) or (
+        await db.is_username_taken_in_room(room_id, username)
+    )
+    if username_taken:
         await websocket.accept()
         await websocket.send_text(json.dumps({
             "type": "error",
