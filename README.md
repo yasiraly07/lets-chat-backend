@@ -25,8 +25,8 @@ python -m venv .venv
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Configure environment (optional — defaults work out of the box)
-cp .env.example .env          # edit Supabase URL/key if needed
+# 3. Configure environment (required)
+# Ensure .env contains SUPABASE_URL and SUPABASE_KEY
 
 # 4. Run the development server
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
@@ -40,14 +40,27 @@ All settings are loaded via `config.py` (pydantic-settings) and can be overridde
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SUPABASE_URL` | *(built-in)* | Supabase project URL |
-| `SUPABASE_KEY` | *(built-in)* | Supabase anon key |
+| `SUPABASE_URL` | **Required** | Supabase project URL |
+| `SUPABASE_KEY` | **Required** | Supabase anon key |
 | `MAX_USERS_PER_ROOM` | `50` | Max concurrent users per room |
 | `MESSAGE_HISTORY_LIMIT` | `50` | Messages sent to new joiners |
 | `MESSAGE_HISTORY_STORE_LIMIT` | `500` | In-memory message cap before trimming |
 | `RATE_LIMIT_MESSAGES` | `10` | Max messages per window |
 | `RATE_LIMIT_WINDOW_SECONDS` | `5` | Sliding window duration (seconds) |
-| `CORS_ORIGINS` | `["*"]` | Allowed CORS origins |
+| `CORS_ORIGINS` | `["*"]` (dev default) | Allowed frontend origins; set explicit URLs in production |
+
+### Required `.env` example
+
+```dotenv
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-supabase-anon-key
+
+# Dev
+CORS_ORIGINS=["http://localhost:5173"]
+
+# Production example
+# CORS_ORIGINS=["https://yourapp.com"]
+```
 
 ## API Reference
 
