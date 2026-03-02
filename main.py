@@ -40,7 +40,14 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting LetsChat backend...")
-    await db.get_client()      # warm up Supabase connection
+    app.state.db_ready = True
+    app.state.startup_issue = None
+    try:
+        await db.get_client()      # warm up Supabase connection
+    except Exception as exc:
+        app.state.db_ready = False
+        app.state.startup_issue = str(exc)
+        logger.exception("Database warm-up failed; continuing in degraded mode")
     yield
     logger.info("Shutting down LetsChat backend...")
     await db.close_client()
@@ -79,4 +86,12 @@ app.include_router(ws_router)
 # ---------------------------------------------------------------------------
 @app.get("/health", tags=["health"])
 async def health():
-    return {"status": "ok", "version": "1.0.0"}
+    db_ready = getattr(app.state, "db_ready", True)
+    issue = getattr(app.state, "startup_issue", None)
+    status = "ok" if db_ready else "degraded"
+    return {
+        "status": status,
+        "version": "1.0.0",
+        "db_ready": db_ready,
+        "startup_issue": issue,
+    }

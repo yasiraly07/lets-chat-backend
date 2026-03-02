@@ -32,12 +32,6 @@ pip install -r requirements.txt
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-For production (single process + safer WS settings behind proxies):
-
-```bash
-uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1 --loop asyncio --http h11 --ws websockets --ws-per-message-deflate false --proxy-headers
-```
-
 Interactive API docs → **http://localhost:8000/docs**
 
 ## Configuration
